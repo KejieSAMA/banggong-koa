@@ -1,6 +1,7 @@
-/* 商城接口路由：统一返回 { code: 0, data, msg }，img 为 /images/* 相对路径（由客户端拼接域名） */
+/* 商城目录接口：统一返回 { code: 0, data, msg }，img 为 /images/* 相对路径（客户端拼接域名）
+   数据源由 db.catalog() 决定：有 MySQL 读库，无库回落静态 data/db.js */
 const Router = require("koa-router");
-const { CATS, PRODUCTS, BANNERS, HOT_KEYWORDS } = require("../data/db");
+const db = require("../db");
 
 const IMG = "/images/";
 const router = new Router({ prefix: "/api" });
@@ -12,25 +13,30 @@ const ok = (ctx, data, msg = "") => {
 const withImg = p => Object.assign({}, p, { img: IMG + p.img });
 
 router.get("/banners", async ctx => {
-  ok(ctx, BANNERS.map(b => Object.assign({}, b, { img: IMG + b.img })));
+  const c = await db.catalog();
+  ok(ctx, c.banners.map(b => Object.assign({}, b, { img: IMG + b.img })));
 });
 
 router.get("/categories", async ctx => {
-  ok(ctx, CATS);
+  const c = await db.catalog();
+  ok(ctx, c.cats);
 });
 
 router.get("/products", async ctx => {
-  ok(ctx, PRODUCTS.map(withImg));
+  const c = await db.catalog();
+  ok(ctx, c.products.map(withImg));
 });
 
 router.get("/products/:id", async ctx => {
-  const p = PRODUCTS.find(x => x.id === ctx.params.id);
+  const c = await db.catalog();
+  const p = c.products.find(x => x.id === ctx.params.id);
   if (p) ok(ctx, withImg(p));
   else ok(ctx, null, "商品不存在");
 });
 
 router.get("/hot-keywords", async ctx => {
-  ok(ctx, HOT_KEYWORDS);
+  const c = await db.catalog();
+  ok(ctx, c.hotKeywords);
 });
 
 module.exports = router;

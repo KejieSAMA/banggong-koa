@@ -11,6 +11,7 @@ const fs = require("fs");
 const path = require("path");
 const counter = require("./db");
 const mall = require("./routes/mall");
+const user = require("./routes/user");
 
 const app = new Koa();
 
@@ -80,7 +81,9 @@ app
   .use(router.routes())
   .use(router.allowedMethods())
   .use(mall.routes())
-  .use(mall.allowedMethods());
+  .use(mall.allowedMethods())
+  .use(user.routes())
+  .use(user.allowedMethods());
 
 const port = process.env.PORT || 80;
 async function bootstrap() {

@@ -2,13 +2,14 @@
 
 办公严选小程序后端服务，基于[微信云托管 wxcloudrun-koa 模板](https://github.com/WeixinCloud/wxcloudrun-koa)二次开发（Apache-2.0）。
 
-提供商城演示数据接口（分类/商品/轮播/热搜）与静态图片服务；模板原有的计数器与 OpenID 示例接口保留，MySQL 已改为**可选依赖**——未配置数据库环境变量时自动降级为内存计数，服务可正常启动。
+提供商城目录接口（分类/商品/轮播/热搜）与静态图片服务；**用户体系**（资料/收藏/足迹/搜索历史，经云托管网关注入的 `x-wx-openid` 免鉴权识别）；MySQL 为**可选依赖**——未配置时目录回落静态数据、用户接口返回 `code:1`（客户端自动转本地模式）、计数用内存降级。
 
 ## 本地运行
 
 ```bash
 npm install
-PORT=3000 node index.js   # 默认 80
+PORT=3000 node index.js          # 无 MySQL：静态目录 + 用户接口 code:1
+node tools/test-user-routes.js   # 用户路由逻辑免库测试（内存桩，14 项断言）
 ```
 
 ## 项目结构
@@ -18,9 +19,11 @@ PORT=3000 node index.js   # 默认 80
 ├── Dockerfile              # 容器配置（模板原样）
 ├── container.config.json   # 模板部署「服务设置」初始值（二开忽略）
 ├── index.js                # 入口：路由注册 + CORS + 静态图片
-├── db.js                   # 计数示例：MySQL 可选，无库时内存降级
-├── routes/mall.js          # 商城接口路由
-├── data/db.js              # 演示数据（CATS/PRODUCTS/BANNERS/HOT_KEYWORDS）
+├── db.js                   # sequelize 模型（目录+用户）+ 自动建表/种子 + 降级
+├── routes/mall.js          # 商城目录接口
+├── routes/user.js          # 用户体系接口（openid 免鉴权）
+├── data/db.js              # 静态兜底数据（同时是数据库种子源）
+├── tools/test-user-routes.js # 用户路由免库测试
 ├── images/                 # 商品/轮播图片（39 张）
 ├── index.html              # 模板演示首页
 └── package.json
@@ -28,10 +31,10 @@ PORT=3000 node index.js   # 默认 80
 
 ## API 文档
 
-统一响应结构：`{ "code": 0, "data": ..., "msg": "" }`（code=0 成功）。
+统一响应结构：`{ "code": 0, "data": ..., "msg": "" }`（code=0 成功；code=1 表示未登录/数据库未就绪）。
 图片字段为 `/images/xxx.jpg` 相对路径，由客户端拼接公网域名。
 
-### 商城接口
+### 商城目录
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -42,10 +45,20 @@ PORT=3000 node index.js   # 默认 80
 | GET | `/api/hot-keywords` | 热搜词数组 |
 | GET | `/images/:file` | 静态图片（仅 images 目录，缓存 1 天） |
 
-```
-curl https://<云托管服务域名>/api/products
-curl https://<云托管服务域名>/images/p01.jpg
-```
+### 用户体系（需经小程序 `wx.cloud.callContainer` 调用，网关自动注入 openid）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/user/profile` | 获取资料（首次自动建档）；返回 `{nickname, avatar}` |
+| PUT | `/api/user/profile` | 更新资料 `{nickname, avatar}`（头像为 data URL，≤512KB） |
+| GET | `/api/favorites` | 收藏 productId 列表（最新在前） |
+| POST | `/api/favorites` | `{ids}` 全量替换（幂等，保持传入顺序） |
+| GET | `/api/history` | 足迹 productId 列表（≤20，最近在前） |
+| POST | `/api/history` | `{id}` 置顶去重追加 |
+| DELETE | `/api/history` | 清空足迹 |
+| GET | `/api/search-history` | 搜索词列表（≤8，最近在前） |
+| POST | `/api/search-history` | `{q}` 置顶去重追加 |
+| DELETE | `/api/search-history` | 清空搜索历史 |
 
 ### 模板原有接口
 
@@ -53,7 +66,23 @@ curl https://<云托管服务域名>/images/p01.jpg
 |---|---|---|
 | GET | `/api/count` | 获取计数 |
 | POST | `/api/count` | `{"action":"inc"\|"clear"}` 自增/清零 |
-| GET | `/api/wx_openid` | 小程序经云托管调用时回显 OpenID（`x-wx-source` 头存在时） |
+| GET | `/api/wx_openid` | 回显网关注入的 OpenID |
+
+## 部署（微信云托管）
+
+1. 控制台开通 **MySQL**（云托管数据库），记下地址/账号/密码
+2. 服务「设置」→ 环境变量补齐：
+
+| 变量 | 说明 |
+|---|---|
+| `MYSQL_ADDRESS` | `host:port`（控制台 MySQL 页面获取） |
+| `MYSQL_USERNAME` / `MYSQL_PASSWORD` | 数据库账号 |
+
+3. 服务「设置」→ 代码源绑定本仓库 → 重新部署
+4. 首次启动自动建表并灌入种子数据（36 商品/6 分类/3 轮播/8 热搜），日志可见 `[db] MySQL 初始化成功`
+5. 验证：`https://<服务域名>/api/products`、小程序端收藏/足迹多端同步生效
+
+> 未配置 MySQL 时不阻塞：目录走静态数据，用户接口 code:1，小程序保持本地模式。
 
 ### 小程序端调用（云托管免鉴权）
 
@@ -65,21 +94,6 @@ wx.cloud.callContainer({
   method: 'GET',
 })
 ```
-
-## 部署（微信云托管）
-
-1. 云托管控制台 → 服务「设置」→ 代码源，绑定本 GitHub 仓库与分支
-2. 「服务列表」对该服务执行部署/重新部署，构建即自动拉取仓库代码
-3. 公网访问：`https://<服务域名>/api/products`
-
-### 环境变量（可选）
-
-| 变量 | 说明 |
-|---|---|
-| `MYSQL_ADDRESS` | `host:port`，云托管 MySQL 页面可获取 |
-| `MYSQL_USERNAME` / `MYSQL_PASSWORD` | 数据库账号 |
-
-> 未配置以上变量时 `/api/count` 走内存计数（重启归零），商城接口不受影响。
 
 ## 本地调试 / 实时开发
 
