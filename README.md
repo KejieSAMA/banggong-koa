@@ -49,12 +49,14 @@ node tools/test-user-routes.js   # 用户路由逻辑免库测试（内存桩，
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/user/profile` | 获取资料（首次自动建档）；返回 `{nickname, avatar}` |
-| PUT | `/api/user/profile` | 更新资料 `{nickname, avatar}`（头像为 data URL，≤512KB） |
+| GET | `/api/user/profile` | 获取资料（首次自动建档）；返回 `{nickname, avatar, loggedOut}` |
+| POST | `/api/user/login` | 一键登录：昵称为默认值时按 openid 生成确定性昵称「用户XXXXXX」（恒定不变），清除退出标记 |
+| PUT | `/api/user/profile` | 更新资料 `{nickname, avatar, loggedOut}`（头像 data URL ≤512KB；`loggedOut:true` 为退出登录，资料保留） |
 | GET | `/api/favorites` | 收藏 productId 列表（最新在前） |
 | POST | `/api/favorites` | `{ids}` 全量替换（幂等，保持传入顺序） |
 | GET | `/api/history` | 足迹 productId 列表（≤20，最近在前） |
 | POST | `/api/history` | `{id}` 置顶去重追加 |
+| DELETE | `/api/history/:id` | 删除单条足迹（幂等） |
 | DELETE | `/api/history` | 清空足迹 |
 | GET | `/api/search-history` | 搜索词列表（≤8，最近在前） |
 | POST | `/api/search-history` | `{q}` 置顶去重追加 |

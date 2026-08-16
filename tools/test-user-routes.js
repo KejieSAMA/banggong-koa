@@ -149,6 +149,17 @@ server.listen(0, "127.0.0.1", async () => {
   check("裁剪至 20 条", r.json.data.length === 20, r.json.data.length);
   check("重复浏览置顶", r.json.data[0] === "p01", r.json.data[0]);
   check("最旧的 p02 被裁掉", !r.json.data.includes("p02"), r.json.data);
+
+  console.log("足迹（单条删除）:");
+  r = await req("DELETE", "/api/history/p05", { openid: OD });
+  check("单条删除 code:0", r.json.code === 0);
+  r = await req("GET", "/api/history", { openid: OD });
+  check("删除后不含 p05", !r.json.data.includes("p05"), r.json.data);
+  r = await req("DELETE", "/api/history/p05", { openid: OD });
+  check("重复删除幂等 code:0", r.json.code === 0);
+  r = await req("GET", "/api/history", { openid: "other-openid" });
+  check("单条删除不影响他人", r.json.data.length === 0);
+
   r = await req("DELETE", "/api/history", { openid: OD });
   check("清空足迹", JSON.stringify(r.json.data) === "[]");
 

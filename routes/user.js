@@ -124,6 +124,14 @@ router.post("/history", async ctx => {
   ok(ctx, rows.slice(0, 20).map(r => r.productId));
 });
 
+router.delete("/history/:id", async ctx => {
+  const user = await needUser(ctx);
+  if (!user) return;
+  const { ViewHistory } = db.models();
+  await ViewHistory.destroy({ where: { openid: user.openid, productId: ctx.params.id } });
+  ok(ctx, []);
+});
+
 router.delete("/history", async ctx => {
   const user = await needUser(ctx);
   if (!user) return;
