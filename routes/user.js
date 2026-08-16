@@ -15,9 +15,12 @@ const deny = (ctx, msg = "未登录或数据库未初始化") => { ctx.body = { 
 let tick = 0;
 const nowTick = () => Date.now() * 1000 + (++tick % 1000);
 
-/* 从请求头解析 openid（云托管经小程序 callContainer 调用时自动携带） */
+/* 从请求头解析 openid（云托管经小程序 callContainer 调用时自动携带）。
+   网关注入 x-wx-openid 时必带 x-wx-source；公网直访可以任意伪造这两个头，
+   因此缺少 x-wx-source 的一律视为未登录，防止冒充他人读写数据 */
 const openidOf = ctx => {
   const h = ctx.request.headers;
+  if (!h["x-wx-source"]) return "";
   return h["x-wx-openid"] || "";
 };
 

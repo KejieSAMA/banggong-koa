@@ -83,14 +83,14 @@ function check(name, cond, extra) {
   else { failed++; console.error("  ✗", name, extra === undefined ? "" : JSON.stringify(extra)); }
 }
 
-function req(method, p, { body, openid } = {}) {
+function req(method, p, { body, openid, source = true } = {}) {
   return new Promise((resolve, reject) => {
     const payload = body ? JSON.stringify(body) : null;
     const r = http.request({
       host: "127.0.0.1", port: server.address().port, path: p, method,
       headers: Object.assign(
         { "content-type": "application/json" },
-        openid ? { "x-wx-openid": openid } : {}
+        openid ? Object.assign({ "x-wx-openid": openid }, source ? { "x-wx-source": "wx" } : {}) : {}
       ),
     }, rp => {
       let s = ""; rp.on("data", d => s += d);
@@ -109,8 +109,10 @@ server.listen(0, "127.0.0.1", async () => {
   console.log("鉴权与降级:");
   let r = await req("GET", "/api/user/profile");
   check("无 openid → code:1", r.json.code === 1);
+  r = await req("GET", "/api/user/profile", { openid: OD, source: false });
+  check("公网伪造 openid（无 x-wx-source）→ code:1", r.json.code === 1);
   r = await req("GET", "/api/user/profile", { openid: OD });
-  check("有 openid → 自动建档 code:0", r.json.code === 0 && r.json.data.nickname === "微信用户");
+  check("有 openid + x-wx-source → 自动建档 code:0", r.json.code === 0 && r.json.data.nickname === "微信用户");
 
   console.log("资料更新:");
   r = await req("PUT", "/api/user/profile", { openid: OD, body: { nickname: " 办公达人 ", avatar: "data:image/png;base64,xxx" } });
