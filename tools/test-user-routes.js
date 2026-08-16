@@ -49,13 +49,14 @@ const dbStub = (() => {
   const SearchHistory = makeTable(r => r.openid + "|" + r.keyword);
   return {
     ready: () => true,
+    /* 与真实 db.js 接口保持一致：sequelize 实例在 db.sequelize()，不在 models() 里 */
     models: () => ({
       User: { async findOrCreate({ where: { openid } }) { return [Users.get(openid) || makeUser(openid), !Users.has(openid)]; } },
       Favorite,
       ViewHistory,
       SearchHistory,
-      sequelize: { async transaction(fn) { return fn(); } },
     }),
+    sequelize: () => ({ async transaction(fn) { return fn(); } }),
   };
 })();
 

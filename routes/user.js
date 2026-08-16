@@ -62,7 +62,8 @@ router.post("/favorites", async ctx => {
   if (!user) return;
   const { ids } = ctx.request.body || {};
   if (!Array.isArray(ids)) { deny(ctx, "参数错误：ids 应为数组"); return; }
-  const { Favorite, sequelize } = db.models();
+  const { Favorite } = db.models();
+  const sequelize = db.sequelize();
   const clean = [...new Set(ids.filter(x => typeof x === "string"))].slice(0, 200);
   await sequelize.transaction(async t => {
     await Favorite.destroy({ where: { openid: user.openid }, transaction: t });

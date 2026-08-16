@@ -124,6 +124,7 @@ async function init() {
 
 const ready = () => orm !== null;
 const models = () => orm && orm.models;
+const sequelize = () => orm && orm.sequelize;
 
 /* —— 目录读取：有库读库，无库回落静态（字段结构保持一致） —— */
 async function catalog() {
@@ -167,4 +168,4 @@ async function clear() {
   return count();
 }
 
-module.exports = { init, ready, models, catalog, count, inc, clear };
+module.exports = { init, ready, models, sequelize, catalog, count, inc, clear };

@@ -15,6 +15,17 @@ const user = require("./routes/user");
 
 const app = new Koa();
 
+/* 统一错误兜底：打印堆栈（云日志可见）并返回 JSON，让客户端拿到具体错误信息 */
+app.use(async (ctx, next) => {
+  try {
+    await next();
+  } catch (e) {
+    console.error("[api] 接口异常:", ctx.method, ctx.url, "\n", (e && e.stack) || e);
+    ctx.status = 500;
+    ctx.body = { code: 500, data: null, msg: (e && e.message) || "服务器内部错误" };
+  }
+});
+
 /* CORS：公网域名下的浏览器调试（小程序 callContainer 不需要） */
 app.use(async (ctx, next) => {
   ctx.set("Access-Control-Allow-Origin", "*");
