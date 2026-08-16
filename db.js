@@ -72,6 +72,8 @@ async function init() {
       openid: { type: DataTypes.STRING(64), primaryKey: true },
       nickname: { type: DataTypes.STRING(64), allowNull: false, defaultValue: "微信用户" },
       avatar: { type: DataTypes.TEXT, allowNull: true }, // data URL
+      /* 退出登录只置标记、不清资料：重新登录取回原昵称头像（昵称按 openid 确定性生成，恒定不变） */
+      loggedOut: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     }, { tableName: "users" });
 
     const Favorite = sequelize.define("Favorite", {

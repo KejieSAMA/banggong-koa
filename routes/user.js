@@ -4,12 +4,20 @@
  * 客户端据此保持「本地模式」（数据仅存小程序 storage）。
  */
 const Router = require("koa-router");
+const crypto = require("crypto");
 const db = require("../db");
 
 const router = new Router({ prefix: "/api" });
 
 const ok = (ctx, data, msg = "") => { ctx.body = { code: 0, data, msg }; };
 const deny = (ctx, msg = "未登录或数据库未初始化") => { ctx.body = { code: 1, data: null, msg }; };
+
+/* 默认昵称「用户XXXXXX」：按 openid 哈希确定性生成——
+   同一微信号无论退出重登多少次、换多少设备，昵称恒定 */
+const genName = openid => {
+  const h = crypto.createHash("md5").update(String(openid)).digest("hex");
+  return "用户" + parseInt(h.slice(0, 8), 16).toString(36).slice(0, 6).padEnd(6, "0");
+};
 
 /* 单调时间戳（毫秒 + 进程内序号），避免同毫秒写入导致排序不稳定 */
 let tick = 0;
@@ -37,18 +45,31 @@ const needUser = async ctx => {
 router.get("/user/profile", async ctx => {
   const user = await needUser(ctx);
   if (!user) return;
-  ok(ctx, { nickname: user.nickname, avatar: user.avatar || "" });
+  ok(ctx, { nickname: user.nickname, avatar: user.avatar || "", loggedOut: !!user.loggedOut });
+});
+
+/* 一键登录：身份即 openid。昵称为默认值时按 openid 生成确定性昵称（仅首次），
+   已有昵称（含用户改过的）原样保留；清除退出标记。幂等，可重复调用 */
+router.post("/user/login", async ctx => {
+  const user = await needUser(ctx);
+  if (!user) return;
+  const patch = {};
+  if (!user.nickname || user.nickname === "微信用户") patch.nickname = genName(user.openid);
+  if (user.loggedOut) patch.loggedOut = false;
+  if (Object.keys(patch).length) await user.update(patch);
+  ok(ctx, { nickname: user.nickname, avatar: user.avatar || "", loggedOut: false });
 });
 
 router.put("/user/profile", async ctx => {
   const user = await needUser(ctx);
   if (!user) return;
-  const { nickname, avatar } = ctx.request.body || {};
+  const { nickname, avatar, loggedOut } = ctx.request.body || {};
   const patch = {};
   if (typeof nickname === "string" && nickname.trim()) patch.nickname = nickname.trim().slice(0, 64);
   if (typeof avatar === "string") patch.avatar = avatar.slice(0, 512 * 1024); // data URL 上限 512KB
+  if (typeof loggedOut === "boolean") patch.loggedOut = loggedOut; // 退出登录仅置标记，资料保留
   await user.update(patch);
-  ok(ctx, { nickname: user.nickname, avatar: user.avatar || "" });
+  ok(ctx, { nickname: user.nickname, avatar: user.avatar || "", loggedOut: !!user.loggedOut });
 });
 
 /* —— 收藏（全量替换，幂等；保持客户端顺序：最新在前） —— */

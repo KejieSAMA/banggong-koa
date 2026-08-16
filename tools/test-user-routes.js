@@ -36,7 +36,7 @@ function makeTable(keyOf) {
 const Users = new Map();
 function makeUser(openid) {
   const user = {
-    openid, nickname: "微信用户", avatar: null,
+    openid, nickname: "微信用户", avatar: null, loggedOut: false,
     async update(patch) { Object.assign(user, patch); },
   };
   Users.set(openid, user);
@@ -117,6 +117,20 @@ server.listen(0, "127.0.0.1", async () => {
   console.log("资料更新:");
   r = await req("PUT", "/api/user/profile", { openid: OD, body: { nickname: " 办公达人 ", avatar: "data:image/png;base64,xxx" } });
   check("昵称 trim 保存 + 头像", r.json.data.nickname === "办公达人" && r.json.data.avatar.startsWith("data:image"));
+
+  console.log("登录（确定性默认昵称 + 退出保留资料）:");
+  const OD2 = "login-openid";
+  r = await req("POST", "/api/user/login", { openid: OD2 });
+  check("首次登录生成 用户XXXXXX", /^用户[0-9a-z]{6}$/.test(r.json.data.nickname), r.json.data);
+  const stableName = r.json.data.nickname;
+  await req("PUT", "/api/user/profile", { openid: OD2, body: { loggedOut: true } });
+  r = await req("GET", "/api/user/profile", { openid: OD2 });
+  check("退出登录：资料保留 + loggedOut=true", r.json.data.nickname === stableName && r.json.data.loggedOut === true, r.json.data);
+  r = await req("POST", "/api/user/login", { openid: OD2 });
+  check("重新登录：昵称不变 + loggedOut=false", r.json.data.nickname === stableName && r.json.data.loggedOut === false, r.json.data);
+  await req("PUT", "/api/user/profile", { openid: OD2, body: { nickname: "自定义昵称", avatar: "data:image/png;base64,yyy" } });
+  r = await req("POST", "/api/user/login", { openid: OD2 });
+  check("改过资料后重登：保留自定义昵称头像", r.json.data.nickname === "自定义昵称" && r.json.data.avatar.startsWith("data:image"));
 
   console.log("收藏（全量替换）:");
   await req("POST", "/api/favorites", { openid: OD, body: { ids: ["p01", "p02", "p02"] } });
