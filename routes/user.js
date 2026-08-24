@@ -45,16 +45,20 @@ const needUser = async ctx => {
 router.get("/user/profile", async ctx => {
   const user = await needUser(ctx);
   if (!user) return;
-  ok(ctx, { nickname: user.nickname, avatar: user.avatar || "", loggedOut: !!user.loggedOut });
+  /* admin/openid 供客户端显隐管理入口、配置白名单（仅本人自己的 openid） */
+  ok(ctx, {
+    nickname: user.nickname, avatar: user.avatar || "", loggedOut: !!user.loggedOut,
+    admin: require("./admin").isAdmin(user.openid), openid: user.openid,
+  });
 });
 
-/* 一键登录：身份即 openid。昵称为默认值时按 openid 生成确定性昵称（仅首次），
-   已有昵称（含用户改过的）原样保留；清除退出标记。幂等，可重复调用 */
+/* 一键登录：身份即 openid。用户未显式改过昵称（!named）时一律按 openid 重算确定性
+   昵称——既保证稳定，也自愈被旧版客户端污染的随机昵称；已有自定义昵称原样保留 */
 router.post("/user/login", async ctx => {
   const user = await needUser(ctx);
   if (!user) return;
   const patch = {};
-  if (!user.nickname || user.nickname === "微信用户") patch.nickname = genName(user.openid);
+  if (!user.named) patch.nickname = genName(user.openid);
   if (user.loggedOut) patch.loggedOut = false;
   if (Object.keys(patch).length) await user.update(patch);
   ok(ctx, { nickname: user.nickname, avatar: user.avatar || "", loggedOut: false });
@@ -65,7 +69,10 @@ router.put("/user/profile", async ctx => {
   if (!user) return;
   const { nickname, avatar, loggedOut } = ctx.request.body || {};
   const patch = {};
-  if (typeof nickname === "string" && nickname.trim()) patch.nickname = nickname.trim().slice(0, 64);
+  if (typeof nickname === "string" && nickname.trim()) {
+    patch.nickname = nickname.trim().slice(0, 64);
+    patch.named = true; // 显式编辑过的昵称，登录时保留
+  }
   if (typeof avatar === "string") patch.avatar = avatar.slice(0, 512 * 1024); // data URL 上限 512KB
   if (typeof loggedOut === "boolean") patch.loggedOut = loggedOut; // 退出登录仅置标记，资料保留
   await user.update(patch);

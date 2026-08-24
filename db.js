@@ -49,12 +49,13 @@ async function init() {
       brand: { type: DataTypes.STRING(128), allowNull: false, defaultValue: "" },
       price: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
       orig: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
-      img: { type: DataTypes.STRING(128), allowNull: false },
+      img: { type: DataTypes.TEXT, allowNull: false }, // 相对路径或完整 URL（OSS）
       tag: { type: DataTypes.STRING(16), allowNull: true },
       rating: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 5 },
       sold: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       desc: { type: DataTypes.TEXT, allowNull: true },
       specs: { type: DataTypes.JSON, allowNull: false, defaultValue: [] },
+      online: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true }, // 下架后前台不可见
     }, { tableName: "products", timestamps: false });
 
     const Banner = sequelize.define("Banner", {
@@ -72,8 +73,11 @@ async function init() {
       openid: { type: DataTypes.STRING(64), primaryKey: true },
       nickname: { type: DataTypes.STRING(64), allowNull: false, defaultValue: "微信用户" },
       avatar: { type: DataTypes.TEXT, allowNull: true }, // data URL
-      /* 退出登录只置标记、不清资料：重新登录取回原昵称头像（昵称按 openid 确定性生成，恒定不变） */
+      /* 退出登录只置标记、不清资料：重新登录取回原昵称头像 */
       loggedOut: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+      /* 用户显式编辑过昵称：登录时保留；否则一律按 openid 重算确定性昵称
+         （自愈历史上被旧版客户端污染的随机昵称） */
+      named: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     }, { tableName: "users" });
 
     const Favorite = sequelize.define("Favorite", {
@@ -137,7 +141,7 @@ async function catalog() {
   const m = models();
   const [cats, products, banners, hotWords] = await Promise.all([
     m.Category.findAll({ raw: true }),
-    m.Product.findAll({ raw: true, order: [["id", "ASC"]] }),
+    m.Product.findAll({ raw: true, order: [["id", "ASC"]], where: { online: true } }),
     m.Banner.findAll({ raw: true }),
     m.HotKeyword.findAll({ raw: true }),
   ]);

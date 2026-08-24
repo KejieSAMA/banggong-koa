@@ -28,6 +28,14 @@ function makeTable(keyOf) {
       return n;
     },
     async bulkCreate(recs) { for (const r of recs) rows.set(keyOf(r), Object.assign({ createdAt: ++seq }, r)); },
+    async create(rec) { rows.set(keyOf(rec), Object.assign({ createdAt: ++seq }, rec)); return rec; },
+    async update(patch, { where = {} } = {}) {
+      let n = 0;
+      for (const r of rows.values()) {
+        if (Object.keys(where).every(f => r[f] === where[f])) { Object.assign(r, patch); n++; }
+      }
+      return [n]; // sequelize 静态 update 返回 [受影响行数]
+    },
     async upsert(rec) { rows.set(keyOf(rec), Object.assign({}, rows.get(keyOf(rec)) || { createdAt: ++seq }, rec)); },
     rows,
   };
@@ -47,6 +55,7 @@ const dbStub = (() => {
   const Favorite = makeTable(r => r.openid + "|" + r.productId);
   const ViewHistory = makeTable(r => r.openid + "|" + r.productId);
   const SearchHistory = makeTable(r => r.openid + "|" + r.keyword);
+  const Product = makeTable(r => r.id);
   return {
     ready: () => true,
     /* 与真实 db.js 接口保持一致：sequelize 实例在 db.sequelize()，不在 models() 里 */
@@ -55,6 +64,7 @@ const dbStub = (() => {
       Favorite,
       ViewHistory,
       SearchHistory,
+      Product,
     }),
     sequelize: () => ({ async transaction(fn) { return fn(); } }),
   };
@@ -66,6 +76,7 @@ require.cache[dbPath] = { id: dbPath, filename: dbPath, loaded: true, exports: d
 
 const Koa = require(path.join(__dirname, '..', 'node_modules', 'koa'));
 const userRoutes = require(path.join(__dirname, '..', 'routes', 'user'));
+const adminRoutes = require(path.join(__dirname, '..', 'routes', 'admin'));
 
 const app = new Koa();
 app.use(async (ctx, next) => {
@@ -75,6 +86,7 @@ app.use(async (ctx, next) => {
 const bodyParser = require(path.join(__dirname, '..', 'node_modules', 'koa-bodyparser'));
 app.use(bodyParser());
 app.use(userRoutes.routes()).use(userRoutes.allowedMethods());
+app.use(adminRoutes.router.routes()).use(adminRoutes.router.allowedMethods());
 
 /* —— 断言工具 —— */
 let passed = 0, failed = 0;
@@ -132,6 +144,14 @@ server.listen(0, "127.0.0.1", async () => {
   r = await req("POST", "/api/user/login", { openid: OD2 });
   check("改过资料后重登：保留自定义昵称头像", r.json.data.nickname === "自定义昵称" && r.json.data.avatar.startsWith("data:image"));
 
+  console.log("登录（污染自愈）:");
+  const OD3 = "polluted-openid";
+  r = await req("POST", "/api/user/login", { openid: OD3 });
+  const detName = r.json.data.nickname;
+  Users.get(OD3).nickname = "用户zzzz99"; // 模拟旧版客户端写入的随机昵称（named=false）
+  r = await req("POST", "/api/user/login", { openid: OD3 });
+  check("污染随机昵称 → 登录自愈为确定性昵称", r.json.data.nickname === detName && detName !== "用户zzzz99", { detName, now: r.json.data.nickname });
+
   console.log("收藏（全量替换）:");
   await req("POST", "/api/favorites", { openid: OD, body: { ids: ["p01", "p02", "p02"] } });
   r = await req("GET", "/api/favorites", { openid: OD });
@@ -176,6 +196,36 @@ server.listen(0, "127.0.0.1", async () => {
   await req("POST", "/api/favorites", { openid: OD, body: { ids: ["p01"] } });
   r = await req("GET", "/api/favorites", { openid: "other-openid" });
   check("不同 openid 互不可见", JSON.stringify(r.json.data) === "[]", r.json.data);
+
+  console.log("管理端（鉴权 / 商品 CRUD / 上下架 / OSS）:");
+  process.env.ADMIN_OPENIDS = "admin-od";
+  r = await req("GET", "/api/admin/products", { openid: OD });
+  check("非管理员 → code:1", r.json.code === 1);
+  r = await req("GET", "/api/user/profile", { openid: "admin-od" });
+  check("profile 返回 admin 标记与 openid", r.json.data.admin === true && r.json.data.openid === "admin-od", r.json.data);
+  r = await req("GET", "/api/admin/products", { openid: "admin-od" });
+  check("管理员列表 code:0", r.json.code === 0 && Array.isArray(r.json.data));
+  r = await req("POST", "/api/admin/products", { openid: "admin-od", body: { name: " 测试商品 ", cat: "pen", sub: "中性笔", price: 9.9, img: "https://bucket.oss.example.com/a.jpg", specs: [["容量", "0.5mm"], ["颜色", "黑"], ["", "空键应被过滤"]] } });
+  check("创建商品（specs 过滤空键）", r.json.code === 0 && r.json.data.id, r.json);
+  const pid = r.json.data && r.json.data.id;
+  r = await req("GET", "/api/admin/products", { openid: "admin-od" });
+  const created = r.json.data.find(x => x.id === pid);
+  check("列表含新商品且字段清洗生效", created && created.name === "测试商品" && Number(created.price) === 9.9 && created.specs.length === 2, created);
+  r = await req("POST", "/api/admin/products", { openid: "admin-od", body: { cat: "pen", sub: "中性笔", price: 1, img: "a.jpg" } });
+  check("缺少必填字段拒绝", r.json.code === 1);
+  r = await req("PUT", "/api/admin/products/" + pid, { openid: "admin-od", body: { price: 19.9, online: false } });
+  check("更新 + 下架", r.json.code === 0);
+  r = await req("PUT", "/api/admin/products/not-exist", { openid: "admin-od", body: { price: 1 } });
+  check("更新不存在 → code:1", r.json.code === 1);
+  r = await req("GET", "/api/admin/products", { openid: "admin-od" });
+  const updated = r.json.data.find(x => x.id === pid);
+  check("下架状态与价格已更新", updated && updated.online === false && Number(updated.price) === 19.9, updated);
+  r = await req("GET", "/api/admin/upload-token", { openid: "admin-od" });
+  check("未配置 OSS → code:1", r.json.code === 1);
+  r = await req("DELETE", "/api/admin/products/" + pid, { openid: "admin-od" });
+  check("删除商品 code:0", r.json.code === 0);
+  r = await req("GET", "/api/admin/products", { openid: "admin-od" });
+  check("删除后列表不含", !r.json.data.some(x => x.id === pid));
 
   console.log(`\n结果: ${passed} 通过, ${failed} 失败`);
   server.close();

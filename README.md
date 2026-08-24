@@ -62,6 +62,36 @@ node tools/test-user-routes.js   # 用户路由逻辑免库测试（内存桩，
 | POST | `/api/search-history` | `{q}` 置顶去重追加 |
 | DELETE | `/api/search-history` | 清空搜索历史 |
 
+### 管理端（仅管理员：环境变量 `ADMIN_OPENIDS` 白名单内的 openid）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/admin/products` | 全量商品（含已下架） |
+| POST | `/api/admin/products` | 新建（必填 name/cat/sub/price/img；服务端生成 id） |
+| PUT | `/api/admin/products/:id` | 更新传入字段（含 `{online:false}` 下架） |
+| DELETE | `/api/admin/products/:id` | 删除（幂等） |
+| GET | `/api/admin/upload-token?ext=jpg` | OSS 直传凭证 `{host,key,policy,OSSAccessKeyId,signature}`（未配置返回 code:1） |
+
+公开目录接口（`/api/products`、`/api/products/:id`）自动过滤 `online=false` 的商品。
+
+## 管理端配置（管理员 + 阿里云 OSS 图床）
+
+1. **管理员白名单**：小程序「设置 → 我的ID」复制 openid（登录后显示），配置到服务环境变量 `ADMIN_OPENIDS`（多人逗号分隔），重新部署后「我的」页出现「商品管理」入口
+2. **OSS 开通**（商品图片直传，AK/SK 只存服务端）：
+   - 阿里云 OSS 创建 bucket，读写权限设「公共读」（商品图需公网可访问）
+   - bucket「跨域设置」：来源 `*`、允许 Methods `POST, PUT`、允许 Headers `*`
+   - 建议 RAM 子账号仅授予该 bucket 写权限，取 AccessKeyId/Secret
+3. 服务「设置」→ 环境变量补齐：
+
+| 变量 | 说明 |
+|---|---|
+| `ADMIN_OPENIDS` | 管理员 openid，逗号分隔 |
+| `OSS_ACCESS_KEY_ID` | RAM 子账号 AK |
+| `OSS_ACCESS_KEY_SECRET` | RAM 子账号 SK |
+| `OSS_BUCKET` | bucket 名 |
+| `OSS_REGION` | 如 `oss-cn-beijing` |
+| `OSS_DIR`（可选） | 上传目录前缀，如 `bg/` |
+
 ### 模板原有接口
 
 | 方法 | 路径 | 说明 |
