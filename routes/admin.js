@@ -134,4 +134,7 @@ router.get("/upload-token", async ctx => {
   });
 });
 
-module.exports = { router, isAdmin };
+/* 直接导出 router 实例（与 mall/user 一致，index.js 用 admin.routes() 挂载）；
+   isAdmin 挂为属性供 user.js 判断管理员标记 */
+module.exports = router;
+module.exports.isAdmin = isAdmin;

@@ -77,6 +77,10 @@ require.cache[dbPath] = { id: dbPath, filename: dbPath, loaded: true, exports: d
 const Koa = require(path.join(__dirname, '..', 'node_modules', 'koa'));
 const userRoutes = require(path.join(__dirname, '..', 'routes', 'user'));
 const adminRoutes = require(path.join(__dirname, '..', 'routes', 'admin'));
+if (typeof adminRoutes.routes !== 'function' || typeof adminRoutes.isAdmin !== 'function') {
+  console.error("✗ admin 路由模块导出形态错误（应直接导出 router 并挂 isAdmin）");
+  process.exit(1);
+}
 
 const app = new Koa();
 app.use(async (ctx, next) => {
@@ -86,7 +90,7 @@ app.use(async (ctx, next) => {
 const bodyParser = require(path.join(__dirname, '..', 'node_modules', 'koa-bodyparser'));
 app.use(bodyParser());
 app.use(userRoutes.routes()).use(userRoutes.allowedMethods());
-app.use(adminRoutes.router.routes()).use(adminRoutes.router.allowedMethods());
+app.use(adminRoutes.routes()).use(adminRoutes.allowedMethods());
 
 /* —— 断言工具 —— */
 let passed = 0, failed = 0;
