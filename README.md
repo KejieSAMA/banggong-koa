@@ -70,7 +70,13 @@ node tools/test-user-routes.js   # 用户路由逻辑免库测试（内存桩，
 | POST | `/api/admin/products` | 新建（必填 name/cat/sub/price/img；服务端生成 id） |
 | PUT | `/api/admin/products/:id` | 更新传入字段（含 `{online:false}` 下架） |
 | DELETE | `/api/admin/products/:id` | 删除（幂等） |
+| GET | `/api/admin/categories` | 分类列表（含每分类商品数 productCount） |
+| POST | `/api/admin/categories` | 新建分类 `{name, icon, subs:[..]}`（subs 去空去重 ≤8） |
+| PUT | `/api/admin/categories/:id` | 更新分类 |
+| DELETE | `/api/admin/categories/:id` | 删除分类（该分类下有商品则拒绝） |
 | GET | `/api/admin/upload-token?ext=jpg` | OSS 直传凭证 `{host,key,policy,OSSAccessKeyId,signature}`（未配置返回 code:1） |
+
+商品图集：`images` JSON 数组（≤9 张 URL，首张为主图，保存时自动同步 `img = images[0]`）；公开目录返回 `images`（无图集时兜底 `[img]`）。
 
 公开目录接口（`/api/products`、`/api/products/:id`）自动过滤 `online=false` 的商品。
 

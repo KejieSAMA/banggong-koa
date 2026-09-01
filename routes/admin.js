@@ -40,6 +40,14 @@ function sanitize(body) {
     if (!b.img) return { error: "请上传商品图片" };
     patch.img = b.img.slice(0, 1024); // 相对路径或完整 URL（OSS）
   }
+  /* 图集：≤9 张 URL；非空时主图 img 与首张同步（列表/卡片/分享继续读 img） */
+  if (Array.isArray(b.images)) {
+    const imgs = b.images.filter(u => typeof u === "string" && u && u.length <= 1024).slice(0, 9);
+    if (imgs.length) {
+      patch.images = imgs;
+      patch.img = imgs[0];
+    }
+  }
   if (b.price !== undefined && b.price !== null && b.price !== "") {
     const v = Number(b.price);
     if (!(v >= 0)) return { error: "价格格式不正确" };
@@ -86,7 +94,7 @@ router.post("/products", async ctx => {
   }
   const { Product } = db.models();
   const id = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  await Product.create(Object.assign({ rating: 5, sold: 0, brand: "", desc: "", specs: [], online: true }, patch, { id }));
+  await Product.create(Object.assign({ rating: 5, sold: 0, brand: "", desc: "", specs: [], online: true, images: [patch.img] }, patch, { id }));
   ok(ctx, { id });
 });
 
@@ -105,6 +113,67 @@ router.delete("/products/:id", async ctx => {
   if (!(await adminOnly(ctx))) return;
   const { Product } = db.models();
   await Product.destroy({ where: { id: ctx.params.id } });
+  ok(ctx, { id: ctx.params.id }); // 幂等
+});
+
+/* —— 分类管理 —— */
+function sanitizeCat(body) {
+  const b = body || {};
+  const patch = {};
+  if (typeof b.name === "string") {
+    const v = b.name.trim();
+    if (!v) return { error: "分类名称不能为空" };
+    patch.name = v.slice(0, 32);
+  }
+  if (typeof b.icon === "string") patch.icon = b.icon.trim().slice(0, 32);
+  if (Array.isArray(b.subs)) {
+    patch.subs = [...new Set(
+      b.subs.filter(s => typeof s === "string" && s.trim()).map(s => s.trim().slice(0, 16))
+    )].slice(0, 8);
+  }
+  return { patch };
+}
+
+router.get("/categories", async ctx => {
+  if (!(await adminOnly(ctx))) return;
+  const { Category, Product } = db.models();
+  const [cats, products] = await Promise.all([
+    Category.findAll({ raw: true, order: [["id", "ASC"]] }),
+    Product.findAll({ raw: true, attributes: ["id", "cat"] }),
+  ]);
+  const counts = {};
+  products.forEach(p => { counts[p.cat] = (counts[p.cat] || 0) + 1; });
+  ok(ctx, cats.map(c => Object.assign({}, c, { productCount: counts[c.id] || 0 })));
+});
+
+router.post("/categories", async ctx => {
+  if (!(await adminOnly(ctx))) return;
+  const { patch, error } = sanitizeCat(ctx.request.body);
+  if (error) { deny(ctx, error); return; }
+  if (patch.name === undefined) { deny(ctx, "缺少必填字段：name"); return; }
+  const { Category } = db.models();
+  const id = "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  await Category.create(Object.assign({ icon: "", subs: [] }, patch, { id }));
+  ok(ctx, { id });
+});
+
+router.put("/categories/:id", async ctx => {
+  if (!(await adminOnly(ctx))) return;
+  const { patch, error } = sanitizeCat(ctx.request.body);
+  if (error) { deny(ctx, error); return; }
+  if (!Object.keys(patch).length) { deny(ctx, "没有可更新字段"); return; }
+  const { Category } = db.models();
+  const [n] = await Category.update(patch, { where: { id: ctx.params.id } });
+  if (!n) { deny(ctx, "分类不存在"); return; }
+  ok(ctx, { id: ctx.params.id });
+});
+
+router.delete("/categories/:id", async ctx => {
+  if (!(await adminOnly(ctx))) return;
+  const { Category, Product } = db.models();
+  const count = await Product.count({ where: { cat: ctx.params.id } });
+  if (count > 0) { deny(ctx, `该分类下还有 ${count} 件商品，请先移出或删除`); return; }
+  await Category.destroy({ where: { id: ctx.params.id } });
   ok(ctx, { id: ctx.params.id }); // 幂等
 });
 

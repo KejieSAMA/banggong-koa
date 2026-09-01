@@ -10,8 +10,12 @@ const ok = (ctx, data, msg = "") => {
   ctx.body = { code: 0, data, msg };
 };
 
-/* 完整 URL（OSS）/ data URL 直接透传，相对路径拼图床前缀 */
-const withImg = p => Object.assign({}, p, { img: /^(https?:|data:)/.test(p.img || "") ? p.img : IMG + p.img });
+/* 完整 URL（OSS）/ data URL 直接透传，相对路径拼图床前缀；图集逐项同规则 */
+const passImg = img => /^(https?:|data:)/.test(img || "") ? img : IMG + img;
+const withImg = p => Object.assign({}, p, {
+  img: passImg(p.img),
+  images: (p.images || []).map(passImg),
+});
 
 router.get("/banners", async ctx => {
   const c = await db.catalog();

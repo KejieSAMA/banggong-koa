@@ -55,6 +55,7 @@ async function init() {
       sold: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       desc: { type: DataTypes.TEXT, allowNull: true },
       specs: { type: DataTypes.JSON, allowNull: false, defaultValue: [] },
+      images: { type: DataTypes.JSON, allowNull: false, defaultValue: [] }, // 图集（首张为主图，与 img 同步）
       online: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true }, // 下架后前台不可见
     }, { tableName: "products", timestamps: false });
 
@@ -153,6 +154,7 @@ async function catalog() {
       price: Number(p.price), orig: p.orig == null ? undefined : Number(p.orig),
       img: p.img, tag: p.tag || undefined, rating: Number(p.rating), sold: p.sold,
       desc: p.desc || "", specs: p.specs || [],
+      images: Array.isArray(p.images) && p.images.length ? p.images : [p.img], // 图集兜底主图
     })),
     banners,
     hotKeywords: hotWords.map(w => w.word),

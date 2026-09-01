@@ -37,6 +37,11 @@ function makeTable(keyOf) {
       return [n]; // sequelize 静态 update 返回 [受影响行数]
     },
     async upsert(rec) { rows.set(keyOf(rec), Object.assign({}, rows.get(keyOf(rec)) || { createdAt: ++seq }, rec)); },
+    async count({ where = {} } = {}) {
+      let n = 0;
+      for (const r of rows.values()) if (Object.keys(where).every(f => r[f] === where[f])) n++;
+      return n;
+    },
     rows,
   };
 }
@@ -56,6 +61,7 @@ const dbStub = (() => {
   const ViewHistory = makeTable(r => r.openid + "|" + r.productId);
   const SearchHistory = makeTable(r => r.openid + "|" + r.keyword);
   const Product = makeTable(r => r.id);
+  const Category = makeTable(r => r.id);
   return {
     ready: () => true,
     /* 与真实 db.js 接口保持一致：sequelize 实例在 db.sequelize()，不在 models() 里 */
@@ -65,6 +71,7 @@ const dbStub = (() => {
       ViewHistory,
       SearchHistory,
       Product,
+      Category,
     }),
     sequelize: () => ({ async transaction(fn) { return fn(); } }),
   };
@@ -230,6 +237,36 @@ server.listen(0, "127.0.0.1", async () => {
   check("删除商品 code:0", r.json.code === 0);
   r = await req("GET", "/api/admin/products", { openid: "admin-od" });
   check("删除后列表不含", !r.json.data.some(x => x.id === pid));
+
+  console.log("管理端（商品多图）:");
+  r = await req("POST", "/api/admin/products", { openid: "admin-od", body: { name: "多图商品", cat: "pen", sub: "中性笔", price: 9.9, img: "https://oss/0.jpg", images: ["https://oss/1.jpg", "https://oss/2.jpg", "", "https://oss/3.jpg"] } });
+  const pid2 = r.json.data.id;
+  r = await req("GET", "/api/admin/products", { openid: "admin-od" });
+  const mp = r.json.data.find(x => x.id === pid2);
+  check("images 过滤空项 + img 同步首图", mp && mp.images.length === 3 && mp.img === "https://oss/1.jpg", mp);
+  await req("PUT", "/api/admin/products/" + pid2, { openid: "admin-od", body: { images: ["https://oss/9.jpg"] } });
+  r = await req("GET", "/api/admin/products", { openid: "admin-od" });
+  const mp2 = r.json.data.find(x => x.id === pid2);
+  check("更新图集后 img 跟随首图", mp2 && mp2.img === "https://oss/9.jpg" && mp2.images.length === 1, mp2);
+
+  console.log("管理端（分类 CRUD + 删除保护）:");
+  r = await req("GET", "/api/admin/categories", { openid: "admin-od" });
+  check("分类列表含商品计数", r.json.code === 0 && Array.isArray(r.json.data) && r.json.data.every(c => typeof c.productCount === "number"), r.json.data);
+  r = await req("POST", "/api/admin/categories", { openid: "admin-od", body: { name: " 新分类 ", subs: [" 子类A ", "子类A", "", "子类B"] } });
+  check("创建分类", r.json.code === 0 && r.json.data.id, r.json);
+  const cid = r.json.data && r.json.data.id;
+  r = await req("GET", "/api/admin/categories", { openid: "admin-od" });
+  const cat = r.json.data.find(c => c.id === cid);
+  check("subs 去空去重为 2 个", cat && cat.name === "新分类" && cat.subs.length === 2 && cat.subs[0] === "子类A", cat);
+  r = await req("PUT", "/api/admin/categories/" + cid, { openid: "admin-od", body: { name: "改名分类", icon: "print" } });
+  check("更新分类", r.json.code === 0);
+  r = await req("DELETE", "/api/admin/categories/" + cid, { openid: "admin-od" });
+  check("空分类可删除", r.json.code === 0);
+  r = await req("POST", "/api/admin/categories", { openid: "admin-od", body: { name: "占用分类" } });
+  const cid2 = r.json.data.id;
+  await req("PUT", "/api/admin/products/" + pid2, { openid: "admin-od", body: { cat: cid2 } });
+  r = await req("DELETE", "/api/admin/categories/" + cid2, { openid: "admin-od" });
+  check("有商品的分类删除被拒绝", r.json.code === 1 && /还有 1 件/.test(r.json.msg || ""), r.json);
 
   console.log(`\n结果: ${passed} 通过, ${failed} 失败`);
   server.close();
