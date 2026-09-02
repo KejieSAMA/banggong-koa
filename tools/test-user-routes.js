@@ -62,6 +62,8 @@ const dbStub = (() => {
   const SearchHistory = makeTable(r => r.openid + "|" + r.keyword);
   const Product = makeTable(r => r.id);
   const Category = makeTable(r => r.id);
+  const Banner = makeTable(r => "b:" + (r.img || "") + "|" + (r.t1 || ""));
+  const HotKeyword = makeTable(r => r.word);
   return {
     ready: () => true,
     /* 与真实 db.js 接口保持一致：sequelize 实例在 db.sequelize()，不在 models() 里 */
@@ -72,6 +74,8 @@ const dbStub = (() => {
       SearchHistory,
       Product,
       Category,
+      Banner,
+      HotKeyword,
     }),
     sequelize: () => ({ async transaction(fn) { return fn(); } }),
   };
@@ -267,6 +271,20 @@ server.listen(0, "127.0.0.1", async () => {
   await req("PUT", "/api/admin/products/" + pid2, { openid: "admin-od", body: { cat: cid2 } });
   r = await req("DELETE", "/api/admin/categories/" + cid2, { openid: "admin-od" });
   check("有商品的分类删除被拒绝", r.json.code === 1 && /还有 1 件/.test(r.json.msg || ""), r.json);
+
+  console.log("管理端（Banner / 热搜词全量替换）:");
+  r = await req("GET", "/api/admin/banners", { openid: "admin-od" });
+  check("Banner 列表 code:0", r.json.code === 0 && Array.isArray(r.json.data));
+  r = await req("PUT", "/api/admin/banners", { openid: "admin-od", body: { banners: [{ img: "https://oss/b1.jpg", t1: " 新品上市 ", t2: " T2 " }, { img: "", t1: "x" }] } });
+  check("Banner 替换（过滤无图项 + trim）", r.json.code === 0 && r.json.data.length === 1 && r.json.data[0].t1 === "新品上市", r.json.data);
+  r = await req("GET", "/api/admin/banners", { openid: "admin-od" });
+  check("Banner 替换后读取一致", r.json.data.length === 1 && r.json.data[0].img === "https://oss/b1.jpg", r.json.data);
+  r = await req("PUT", "/api/admin/hot-keywords", { openid: "admin-od", body: { words: [" 笔 ", "笔", "本子", ""] } });
+  check("热搜词替换（去空去重）", r.json.code === 0 && r.json.data.length === 2 && r.json.data[0] === "笔", r.json.data);
+  r = await req("GET", "/api/admin/hot-keywords", { openid: "admin-od" });
+  check("热搜词读取一致", JSON.stringify(r.json.data) === JSON.stringify(["笔", "本子"]), r.json.data);
+  r = await req("PUT", "/api/admin/hot-keywords", { openid: OD, body: { words: ["x"] } });
+  check("非管理员改热搜词 code:1", r.json.code === 1);
 
   console.log(`\n结果: ${passed} 通过, ${failed} 失败`);
   server.close();

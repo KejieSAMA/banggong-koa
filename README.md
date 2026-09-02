@@ -74,6 +74,10 @@ node tools/test-user-routes.js   # 用户路由逻辑免库测试（内存桩，
 | POST | `/api/admin/categories` | 新建分类 `{name, icon, subs:[..]}`（subs 去空去重 ≤8） |
 | PUT | `/api/admin/categories/:id` | 更新分类 |
 | DELETE | `/api/admin/categories/:id` | 删除分类（该分类下有商品则拒绝） |
+| GET | `/api/admin/banners` | 轮播 Banner 列表 |
+| PUT | `/api/admin/banners` | `{banners:[{img,t1,t2}]}` 全量替换（≤10 条，过滤无图项） |
+| GET | `/api/admin/hot-keywords` | 热搜词列表 |
+| PUT | `/api/admin/hot-keywords` | `{words:[...]}` 全量替换（去空去重 ≤20） |
 | GET | `/api/admin/upload-token?ext=jpg` | OSS 直传凭证 `{host,key,policy,OSSAccessKeyId,signature}`（未配置返回 code:1） |
 
 商品图集：`images` JSON 数组（≤9 张 URL，首张为主图，保存时自动同步 `img = images[0]`）；公开目录返回 `images`（无图集时兜底 `[img]`）。

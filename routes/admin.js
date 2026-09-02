@@ -177,6 +177,51 @@ router.delete("/categories/:id", async ctx => {
   ok(ctx, { id: ctx.params.id }); // 幂等
 });
 
+/* —— 内容管理：轮播 Banner / 热搜词（表无主键列，采用全量替换，避免存量表结构迁移） —— */
+router.get("/banners", async ctx => {
+  if (!(await adminOnly(ctx))) return;
+  const { Banner } = db.models();
+  ok(ctx, await Banner.findAll({ raw: true }));
+});
+
+router.put("/banners", async ctx => {
+  if (!(await adminOnly(ctx))) return;
+  const { banners } = ctx.request.body || {};
+  if (!Array.isArray(banners)) { deny(ctx, "参数错误：banners 应为数组"); return; }
+  const clean = banners
+    .filter(b => b && typeof b.img === "string" && b.img.trim())
+    .slice(0, 10)
+    .map(b => ({
+      img: b.img.trim().slice(0, 1024),
+      t1: typeof b.t1 === "string" ? b.t1.trim().slice(0, 128) : "",
+      t2: typeof b.t2 === "string" ? b.t2.trim().slice(0, 128) : "",
+    }));
+  const { Banner } = db.models();
+  await Banner.destroy({ truncate: true });
+  if (clean.length) await Banner.bulkCreate(clean);
+  ok(ctx, clean);
+});
+
+router.get("/hot-keywords", async ctx => {
+  if (!(await adminOnly(ctx))) return;
+  const { HotKeyword } = db.models();
+  const rows = await HotKeyword.findAll({ raw: true });
+  ok(ctx, rows.map(r => r.word));
+});
+
+router.put("/hot-keywords", async ctx => {
+  if (!(await adminOnly(ctx))) return;
+  const { words } = ctx.request.body || {};
+  if (!Array.isArray(words)) { deny(ctx, "参数错误：words 应为数组"); return; }
+  const clean = [...new Set(
+    words.filter(w => typeof w === "string" && w.trim()).map(w => w.trim().slice(0, 32))
+  )].slice(0, 20);
+  const { HotKeyword } = db.models();
+  await HotKeyword.destroy({ truncate: true });
+  if (clean.length) await HotKeyword.bulkCreate(clean.map(w => ({ word: w })));
+  ok(ctx, clean);
+});
+
 /* —— OSS 直传凭证（PostObject 表单签名；AK/SK 只留在服务端环境变量） —— */
 router.get("/upload-token", async ctx => {
   if (!(await adminOnly(ctx))) return;
