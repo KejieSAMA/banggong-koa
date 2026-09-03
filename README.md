@@ -95,7 +95,8 @@ node tools/test-user-routes.js   # 用户路由逻辑免库测试（内存桩，
 
 | 变量 | 说明 |
 |---|---|
-| `ADMIN_OPENIDS` | 管理员 openid，逗号分隔 |
+| `ADMIN_OPENIDS` | 管理员 openid，逗号分隔（小程序通道） |
+| `ADMIN_TOKEN` | 桌面管理端密钥（`x-admin-token` 请求头，与小程序通道二选一即可） |
 | `OSS_ACCESS_KEY_ID` | RAM 子账号 AK |
 | `OSS_ACCESS_KEY_SECRET` | RAM 子账号 SK |
 | `OSS_BUCKET` | bucket 名 |

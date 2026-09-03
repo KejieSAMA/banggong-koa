@@ -15,10 +15,18 @@ const deny = (ctx, msg = "无权限或数据库未初始化") => { ctx.body = { 
 const adminOpenids = () => String(process.env.ADMIN_OPENIDS || "").split(",").map(s => s.trim()).filter(Boolean);
 const isAdmin = openid => adminOpenids().indexOf(String(openid)) >= 0;
 
-/* 管理员前置校验：库就绪 + 网关身份（x-wx-source 防伪造）+ 白名单；通过返回 openid */
+/* 管理员前置校验，两条通道任一通过：
+   ① 小程序（云托管网关）：x-wx-source 防伪造 + openid 白名单
+   ② 桌面管理端：请求头 x-admin-token 与环境变量 ADMIN_TOKEN 常量时间比对 */
 async function adminOnly(ctx) {
   if (!db.ready()) { deny(ctx); return null; }
   const h = ctx.request.headers;
+  const token = String(h["x-admin-token"] || "");
+  if (process.env.ADMIN_TOKEN && token) {
+    const a = crypto.createHash("sha256").update(String(process.env.ADMIN_TOKEN)).digest();
+    const b = crypto.createHash("sha256").update(token).digest();
+    if (crypto.timingSafeEqual(a, b)) return "desktop-admin";
+  }
   const openid = h["x-wx-openid"] || "";
   if (!h["x-wx-source"] || !openid || !isAdmin(openid)) { deny(ctx, "非管理员"); return null; }
   return openid;

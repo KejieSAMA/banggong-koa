@@ -30,7 +30,7 @@ app.use(async (ctx, next) => {
 /* CORS：公网域名下的浏览器调试（小程序 callContainer 不需要） */
 app.use(async (ctx, next) => {
   ctx.set("Access-Control-Allow-Origin", "*");
-  ctx.set("Access-Control-Allow-Headers", "Content-Type, X-WX-SERVICE, X-WX-SOURCE");
+  ctx.set("Access-Control-Allow-Headers", "Content-Type, X-WX-SERVICE, X-WX-SOURCE, X-Admin-Token");
   ctx.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   if (ctx.method === "OPTIONS") {
     ctx.status = 204;
